@@ -38,10 +38,12 @@ class WebhookRequest(BaseModel):
 def get_access_token():
     url = f"{PAYPAL_BASE_URL}/v1/oauth2/token"
     data = {"grant_type": "client_credentials"}
-    response = requests.post(url, data=data, auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET), headers={"Content-Type": "application/x-www-form-urlencoded"})
+    response = requests.post(url,
+                             data=data,
+                             auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET),
+                             headers={"Content-Type": "application/x-www-form-urlencoded"})
     response.raise_for_status()
     return response.json().get("access_token")
-
 
 
 @app.get("/")
@@ -87,7 +89,8 @@ async def create_payment_link(payment_request: PaymentRequest):
         - ZAR: South African Rand
 
     Raises:
-        HTTPException: If there is an error during the PayPal API request or if the approval URL is not found in the response.
+        HTTPException: If there is an error during the PayPal API request
+         or if the approval URL is not found in the response.
     """
     try:
         access_token = get_access_token()
@@ -136,10 +139,10 @@ async def create_payment_link(payment_request: PaymentRequest):
 #         raise HTTPException(status_code=500, detail=str(e))
 
 
-
 @app.get("/check-payment-status/{order_id}", description="""
 Check the status of a PayPal payment order using the provided order ID.
-This endpoint queries the PayPal API to retrieve the current status of a payment order, providing real-time information on whether the payment has been completed, authorized, or is still pending.
+This endpoint queries the PayPal API to retrieve the current status of a payment order, 
+providing real-time information on whether the payment has been completed, authorized, or is still pending.
 """)
 async def check_payment_status(order_id: str):
     """
@@ -178,7 +181,8 @@ async def check_payment_status(order_id: str):
 
 @app.post("/create-webhook/", description="""
 Create a webhook for the specified URL to receive CHECKOUT.ORDER.APPROVED events.
-This endpoint allows you to set up a webhook that will notify your specified URL whenever a checkout order is approved on PayPal.
+This endpoint allows you to set up a webhook that will notify your specified URL 
+whenever a checkout order is approved on PayPal.
 """)
 async def create_webhook(webhook_url: str = Query(..., description="The URL where the webhook events will be sent")):
     """
@@ -217,7 +221,8 @@ async def create_webhook(webhook_url: str = Query(..., description="The URL wher
 
 @app.get("/list-webhooks", description="""
 List all webhooks configured for the PayPal account.
-This endpoint retrieves a list of all webhooks that have been set up for the account, including their URLs and the types of events they are configured to receive.
+This endpoint retrieves a list of all webhooks that have been set up for the account, 
+including their URLs and the types of events they are configured to receive.
 """)
 async def list_webhooks_handler():
     """
@@ -246,7 +251,8 @@ async def list_webhooks_handler():
 
 @app.delete("/delete-webhook/", description="""
 Delete a webhook using the provided webhook ID.
-This endpoint allows you to remove a previously created webhook from your PayPal account. Once deleted, the webhook will no longer receive any events.
+This endpoint allows you to remove a previously created webhook from your PayPal account. 
+Once deleted, the webhook will no longer receive any events.
 """)
 async def delete_webhook(webhook_id: str = Query(..., description="The ID of the webhook to be deleted")):
     """
@@ -278,7 +284,8 @@ async def delete_webhook(webhook_id: str = Query(..., description="The ID of the
             try:
                 error_detail = e.response.json().get("details", [])
                 error_message = ", ".join([detail.get("description", "") for detail in error_detail])
-                raise HTTPException(status_code=e.response.status_code, detail=f"Error deleting webhook: {error_message}")
+                raise HTTPException(status_code=e.response.status_code,
+                                    detail=f"Error deleting webhook: {error_message}")
             except ValueError:
                 # If the response is not JSON, fallback to the original error message
                 pass
@@ -287,7 +294,8 @@ async def delete_webhook(webhook_id: str = Query(..., description="The ID of the
 
 @app.post("/webhook-listener/", description="""
 Listen for incoming webhook events from PayPal.
-This endpoint is designed to receive notifications from PayPal whenever a specified event occurs, such as a checkout order being approved.
+This endpoint is designed to receive notifications from PayPal whenever a specified event occurs, 
+such as a checkout order being approved.
 It processes the incoming webhook payload and extracts relevant information.
 """)
 async def webhook_listener(request: Request):
@@ -314,7 +322,6 @@ async def webhook_listener(request: Request):
         #     os.makedirs(os.path.dirname(file_path), exist_ok=True)
         #     with open(file_path, "w") as file:
         #         file.write(str(payload))
-
 
         return {"order_id": order_id, "status": status}
     except Exception as e:
