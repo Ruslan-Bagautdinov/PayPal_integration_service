@@ -30,9 +30,9 @@ class PaymentRequest(BaseModel):
     amount: float
 
 
-class WebhookRequest(BaseModel):
-    url: str
-    event_types: list
+# class WebhookRequest(BaseModel):
+#     url: str
+#     event_types: list
 
 
 def get_access_token():

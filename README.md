@@ -65,13 +65,8 @@ GET /check-payment-status/ORDER-123456789
 
 **Example request:**
 ```http
-POST /create-webhook/
+POST /create-webhook/?webhook_url=https://www.example.com/webhook-listener/
 Content-Type: application/json
-
-{
-  "url": "https://www.example.com/webhook-listener/",
-  "event_types": ["CHECKOUT.ORDER.APPROVED", "CHECKOUT.ORDER.COMPLETED"]
-}
 ```
 **Example response:**
 ```json
@@ -88,17 +83,31 @@ from fastapi import FastAPI, HTTPException, Request
 
 app = FastAPI()
 
-@app.post("/webhook-listener/")
+@app.post("/webhook-listener/", description="""
+Listen for incoming webhook events from PayPal.
+This endpoint is designed to receive notifications from PayPal whenever a specified event occurs, 
+such as a checkout order being approved.
+It processes the incoming webhook payload and extracts relevant information.
+""")
 async def webhook_listener(request: Request):
+    """
+    Listen for incoming webhook events from PayPal.
+
+    Args:
+        request (Request): The incoming HTTP request containing the webhook payload.
+
+    Returns:
+        dict: A dictionary containing the order ID and the event type.
+
+    Raises:
+        HTTPException: If there is an error processing the webhook payload.
+    """
     try:
         payload = await request.json()
-        event_type = payload.get("event_type")
-        if event_type == "CHECKOUT.ORDER.APPROVED":
-            order_id = payload.get("resource", {}).get("id")
-            # Handle the approved order as needed
-            return {"status": "success", "message": f"Order {order_id} approved"}
-        else:
-            return {"status": "ignored", "message": f"Event type {event_type} ignored"}
+        order_id = payload.get("resource", {}).get("id")
+        status = payload.get("event_type")
+
+        return {"order_id": order_id, "status": status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 ```
