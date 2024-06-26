@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel
 import requests
+from typing import Optional
 import os
 import json
 
@@ -28,6 +29,7 @@ app.add_middleware(
 class PaymentRequest(BaseModel):
     currency: str
     amount: float
+    return_url: Optional[str] = None
 
 
 # class WebhookRequest(BaseModel):
@@ -51,20 +53,12 @@ async def root():
     return RedirectResponse(url='/docs')
 
 
-@app.post("/create-payment-link/", description="""
-Create a payment link for the specified amount and currency. 
-This endpoint facilitates the generation of a PayPal payment link, allowing users to securely complete transactions.
-The response includes the PayPal approval URL and the unique order ID associated with the transaction.
-""")
 async def create_payment_link(payment_request: PaymentRequest):
     """
     Create a payment link for the specified amount and currency.
 
     Args:
-        payment_request (PaymentRequest): {"currency": str, "amount": float}
-
-    Returns:
-        dict: A dictionary containing the PayPal approval URL and the order ID.
+        payment_request (PaymentRequest): {"currency": str, "amount": float, "return_url": Optional[str]}
 
     Supported Currencies:
         - USD: United States Dollar
@@ -88,6 +82,9 @@ async def create_payment_link(payment_request: PaymentRequest):
         - TRY: Turkish Lira
         - ZAR: South African Rand
 
+    Returns:
+        dict: A dictionary containing the PayPal approval URL, the order ID, and the redirect URL (if provided).
+
     Raises:
         HTTPException: If there is an error during the PayPal API request
          or if the approval URL is not found in the response.
@@ -106,6 +103,16 @@ async def create_payment_link(payment_request: PaymentRequest):
                 }
             ]
         }
+
+        if payment_request.return_url:
+            payload["payment_source"] = {
+                "paypal": {
+                    "experience_context": {
+                        "return_url": payment_request.return_url
+                    }
+                }
+            }
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}"
@@ -116,7 +123,10 @@ async def create_payment_link(payment_request: PaymentRequest):
         approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "approve"), None)
         if not approval_url:
             raise HTTPException(status_code=500, detail="Approval URL not found in PayPal response")
-        return {"approval_url": approval_url, "order_id": order_id}
+
+        redirect_url = payment_request.return_url if payment_request.return_url else None
+
+        return {"approval_url": approval_url, "order_id": order_id, "redirect_url": redirect_url}
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
 
