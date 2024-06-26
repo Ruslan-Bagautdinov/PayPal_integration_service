@@ -53,6 +53,13 @@ async def root():
     return RedirectResponse(url='/docs')
 
 
+
+@app.post("/create-payment-link/", description="""
+Create a payment link for the specified amount and currency. 
+This endpoint facilitates the generation of a PayPal payment link, allowing users to securely complete transactions.
+The response includes the PayPal approval URL, the unique order ID associated with the transaction, 
+and the redirect URL where the customer will be redirected after approving the payment.
+""")
 async def create_payment_link(payment_request: PaymentRequest):
     """
     Create a payment link for the specified amount and currency.
