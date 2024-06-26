@@ -97,24 +97,41 @@ async def create_payment_link(payment_request: PaymentRequest):
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders"
-        payload = {
-            "intent": "CAPTURE",
-            "purchase_units": [
-                {
-                    "amount": {
-                        "currency_code": payment_request.currency,
-                        "value": str(payment_request.amount)
+
+        if payment_request.return_url and payment_request.return_url != "string":
+
+            payload = {
+                "intent": "CAPTURE",
+                "purchase_units": [
+                    {
+                        "amount": {
+                            "currency_code": payment_request.currency,
+                            "value": str(payment_request.amount)
+                        }
                     }
-                }
-            ],
-            "payment_source": {
-                "paypal": {
-                    "experience_context": {
-                        "return_url": payment_request.return_url
+                ],
+                "payment_source": {
+                    "paypal": {
+                        "experience_context": {
+                            "return_url": payment_request.return_url
+                        }
                     }
                 }
             }
-        }
+
+        else:
+            payload = {
+                "intent": "CAPTURE",
+                "purchase_units": [
+                    {
+                        "amount": {
+                            "currency_code": payment_request.currency,
+                            "value": str(payment_request.amount)
+                        }
+                    }
+                ]
+            }
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}"
@@ -122,11 +139,25 @@ async def create_payment_link(payment_request: PaymentRequest):
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
         order_id = response.json().get("id")
-        approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "payer-action"),
+
+        if payment_request.return_url and payment_request.return_url != "string":
+
+            approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "payer-action"),
                             None)
+
+        else:
+            approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "approve"),
+                                None)
+
         if not approval_url:
             raise HTTPException(status_code=500, detail="Approval URL not found in PayPal response")
-        return {"approval_url": approval_url, "order_id": order_id, "return_url": payment_request.return_url}
+
+        if payment_request.return_url and payment_request.return_url != "string":
+            redirect_url = payment_request.return_url
+        else:
+            redirect_url = None
+
+        return {"approval_url": approval_url, "order_id": order_id, "return_url": redirect_url}
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
 
