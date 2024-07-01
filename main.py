@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 from typing import Optional
+import logging
 import os
 import json
 
@@ -25,6 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class PaymentRequest(BaseModel):
     currency: str
@@ -138,7 +141,11 @@ async def create_payment_link(payment_request: PaymentRequest):
         }
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
+
         order_id = response.json().get("id")
+
+        logger.info(f"Order_id: {order_id} full PayPal API response from /create-payment-link/")
+        logger.info(f"{response.json()}")
 
         if payment_request.return_url and payment_request.return_url != "string":
 
@@ -215,6 +222,10 @@ async def check_payment_status(order_id: str):
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         order_status = response.json().get("status")
+
+        logger.info(f"Order_id: {order_id} full PayPal API response from /check_payment_status/")
+        logger.info(f"{response.json()}")
+
         return {"order_id": order_id, "status": order_status}
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
