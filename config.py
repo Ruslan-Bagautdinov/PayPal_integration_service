@@ -12,6 +12,8 @@ PAYPAL_BASE_URL = "https://api-m.sandbox.paypal.com"  # Use https://api-m.paypal
 
 RETURN_URL = " https://1721-109-191-145-94.ngrok-free.app"
 
+# RETURN_URL = "https://www.example.com"
+
 RETURN_ENDPOINT = RETURN_URL + '/return-url/'
 
 """
@@ -38,3 +40,4 @@ DKK - Danish Krone
 TRY - Turkish Lira
 ZAR - South African Rand
 """
+print(RETURN_ENDPOINT)

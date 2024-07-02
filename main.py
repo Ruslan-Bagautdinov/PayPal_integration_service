@@ -6,14 +6,11 @@ from pydantic import BaseModel
 import requests
 from typing import Optional
 import logging
-import os
-import json
 
 from config import (PAYPAL_CLIENT_ID,
                     PAYPAL_CLIENT_SECRET,
                     PAYPAL_BASE_URL,
-                    BASE_DIR,
-                    RETURN_URL  # Ensure this is defined in your config
+                    RETURN_ENDPOINT
                     )
 
 
@@ -78,6 +75,10 @@ async def create_payment_link(payment_request: PaymentRequest):
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders"
 
+        return_url = f"{RETURN_ENDPOINT}{payment_request.redirect_id}"
+
+        logger.info(return_url)
+
         payload = {
             "intent": "CAPTURE",
             "purchase_units": [
@@ -91,7 +92,7 @@ async def create_payment_link(payment_request: PaymentRequest):
             "payment_source": {
                 "paypal": {
                     "experience_context": {
-                        "return_url": f"{RETURN_URL}/{payment_request.redirect_id}",  # Include redirect_id as path parameter
+                        "return_url": return_url,  # Include redirect_id as path parameter
                     }
                 }
             }
@@ -105,14 +106,24 @@ async def create_payment_link(payment_request: PaymentRequest):
         response.raise_for_status()
 
         order_id = response.json().get("id")
+
+        logger.info(f"Order_id: {order_id} full PayPal API response from /create-payment-link/")
+        logger.info(f"{response.json()}")
+
+        # Try to find the 'approve' link first, if not found, look for 'payer-action' link
         approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "approve"), None)
+        if not approval_url:
+            approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "payer-action"), None)
 
         if not approval_url:
             raise HTTPException(status_code=500, detail="Approval URL not found in PayPal response")
 
-        return {"approval_url": approval_url, "order_id": order_id, "return_url": payment_request.return_url}
+        return {"approval_url": approval_url, "order_id": order_id, "return_url": return_url}
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+returns = "https://www.example.com/return-url/jopa123?token=3KW787788H052150B&PayerID=V5P76KV5RDNZY"
 
 
 @app.get("/execute-payment/")
@@ -149,22 +160,6 @@ async def handle_return_url(token: str = Query(...), redirect_id: str = Path(...
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# handler for fake completing payments in the sandbox
-
-# @app.post("/capture-payment/")
-# async def capture_payment_handler(order_id: str):
-#     try:
-#         access_token = get_access_token()
-#         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}/capture"
-#         headers = {
-#             "Content-Type": "application/json",
-#             "Authorization": f"Bearer {access_token}"
-#         }
-#         response = requests.post(url, headers=headers)
-#         response.raise_for_status()
-#         return response.json()
-#     except requests.RequestException as e:
-#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/check-payment-status/{order_id}", description="""
@@ -343,3 +338,19 @@ async def webhook_listener(request: Request):
 
 
 
+# handler for fake completing payments in the sandbox
+
+# @app.post("/capture-payment/")
+# async def capture_payment_handler(order_id: str):
+#     try:
+#         access_token = get_access_token()
+#         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}/capture"
+#         headers = {
+#             "Content-Type": "application/json",
+#             "Authorization": f"Bearer {access_token}"
+#         }
+#         response = requests.post(url, headers=headers)
+#         response.raise_for_status()
+#         return response.json()
+#     except requests.RequestException as e:
+#         raise HTTPException(status_code=500, detail=str(e))
