@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,7 +12,8 @@ import json
 from config import (PAYPAL_CLIENT_ID,
                     PAYPAL_CLIENT_SECRET,
                     PAYPAL_BASE_URL,
-                    BASE_DIR
+                    BASE_DIR,
+                    RETURN_URL  # Ensure this is defined in your config
                     )
 
 
@@ -29,10 +30,11 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class PaymentRequest(BaseModel):
     currency: str
     amount: float
-    return_url: Optional[str] = None
+    redirect_id: Optional[str] = None
 
 
 # class WebhookRequest(BaseModel):
@@ -51,6 +53,15 @@ def get_access_token():
     return response.json().get("access_token")
 
 
+def get_redirect_link(redirect_id):
+
+    if redirect_id == 'jopa123':
+        redirect_link = 'https://www.youtube.com/watch?v=l2lUfj3wx2Q'
+        return redirect_link
+
+    return 'https://example.com'
+
+
 @app.get("/")
 async def root():
     return RedirectResponse(url='/docs')
@@ -59,81 +70,32 @@ async def root():
 @app.post("/create-payment-link/", description="""
 Create a payment link for the specified amount and currency. 
 This endpoint facilitates the generation of a PayPal payment link, allowing users to securely complete transactions.
-The response includes the PayPal approval URL, the unique order ID associated with the transaction, and the redirect URL where the customer will be redirected after approving the payment.
+The response includes the PayPal approval URL, the unique order ID associated with the transaction, 
+and the redirect URL where the customer will be redirected after approving the payment.
 """)
 async def create_payment_link(payment_request: PaymentRequest):
-    """
-    Create a payment link for the specified amount and currency.
-
-    Args:
-        payment_request (PaymentRequest): {"currency": str, "amount": float, "return_url": str}
-
-    Supported Currencies:
-        - USD: United States Dollar
-        - EUR: Euro
-        - GBP: British Pound Sterling
-        - CAD: Canadian Dollar
-        - AUD: Australian Dollar
-        - JPY: Japanese Yen
-        - CNY: Chinese Yuan
-        - INR: Indian Rupee
-        - BRL: Brazilian Real
-        - RUB: Russian Ruble
-        - CHF: Swiss Franc
-        - SEK: Swedish Krona
-        - NZD: New Zealand Dollar
-        - SGD: Singapore Dollar
-        - HKD: Hong Kong Dollar
-        - MXN: Mexican Peso
-        - NOK: Norwegian Krone
-        - DKK: Danish Krone
-        - TRY: Turkish Lira
-        - ZAR: South African Rand
-
-    Returns:
-        dict: A dictionary containing the PayPal approval URL, the order ID, and the redirect URL.
-
-    Raises:
-        HTTPException: If there is an error during the PayPal API request
-         or if the approval URL is not found in the response.
-    """
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders"
 
-        if payment_request.return_url and payment_request.return_url != "string":
-
-            payload = {
-                "intent": "CAPTURE",
-                "purchase_units": [
-                    {
-                        "amount": {
-                            "currency_code": payment_request.currency,
-                            "value": str(payment_request.amount)
-                        }
+        payload = {
+            "intent": "CAPTURE",
+            "purchase_units": [
+                {
+                    "amount": {
+                        "currency_code": payment_request.currency,
+                        "value": str(payment_request.amount)
                     }
-                ],
-                "payment_source": {
-                    "paypal": {
-                        "experience_context": {
-                            "return_url": payment_request.return_url
-                        }
+                }
+            ],
+            "payment_source": {
+                "paypal": {
+                    "experience_context": {
+                        "return_url": f"{RETURN_URL}/{payment_request.redirect_id}",  # Include redirect_id as path parameter
                     }
                 }
             }
-
-        else:
-            payload = {
-                "intent": "CAPTURE",
-                "purchase_units": [
-                    {
-                        "amount": {
-                            "currency_code": payment_request.currency,
-                            "value": str(payment_request.amount)
-                        }
-                    }
-                ]
-            }
+        }
 
         headers = {
             "Content-Type": "application/json",
@@ -143,29 +105,47 @@ async def create_payment_link(payment_request: PaymentRequest):
         response.raise_for_status()
 
         order_id = response.json().get("id")
-
-        logger.info(f"Order_id: {order_id} full PayPal API response from /create-payment-link/")
-        logger.info(f"{response.json()}")
-
-        if payment_request.return_url and payment_request.return_url != "string":
-
-            approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "payer-action"),
-                            None)
-
-        else:
-            approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "approve"),
-                                None)
+        approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "approve"), None)
 
         if not approval_url:
             raise HTTPException(status_code=500, detail="Approval URL not found in PayPal response")
 
-        if payment_request.return_url and payment_request.return_url != "string":
-            redirect_url = payment_request.return_url
-        else:
-            redirect_url = None
-
-        return {"approval_url": approval_url, "order_id": order_id, "return_url": redirect_url}
+        return {"approval_url": approval_url, "order_id": order_id, "return_url": payment_request.return_url}
     except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/execute-payment/")
+async def execute_payment(token: str = Query(...)):
+    try:
+        access_token = get_access_token()
+        url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{token}/capture"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        response = requests.post(url, headers=headers)
+        response.raise_for_status()
+
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/return-url/{redirect_id}")
+async def handle_return_url(token: str = Query(...), redirect_id: str = Path(...)):
+    try:
+
+        # Execute the payment
+        execute_response = await execute_payment(token)
+
+        # Redirect to the redirect_link after executing the payment
+
+        redirect_link = get_redirect_link(redirect_id)
+
+        return RedirectResponse(url=redirect_link)
+
+    except HTTPException as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -193,25 +173,6 @@ This endpoint queries the PayPal API to retrieve the current status of a payment
 providing real-time information on whether the payment has been completed, authorized, or is still pending.
 """)
 async def check_payment_status(order_id: str):
-    """
-    Check the status of a PayPal payment order.
-
-    Args:
-        order_id (str): The unique identifier of the PayPal order.
-
-    Returns:
-        dict: A dictionary containing the order ID and its current status.
-
-    Possible Statuses:
-        - CREATED: The order has been created but not yet approved by the buyer.
-        - SAVED: The order has been saved and is awaiting action.
-        - APPROVED: The buyer has approved the order.
-        - VOIDED: The order has been voided.
-        - COMPLETED: The order has been successfully completed.
-
-    Raises:
-        HTTPException: If there is an error during the PayPal API request.
-    """
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}"
@@ -229,6 +190,7 @@ async def check_payment_status(order_id: str):
         return {"order_id": order_id, "status": order_status}
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/create-webhook/", description="""
@@ -378,3 +340,6 @@ async def webhook_listener(request: Request):
         return {"order_id": order_id, "status": status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+

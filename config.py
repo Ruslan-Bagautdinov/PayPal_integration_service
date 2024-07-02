@@ -10,7 +10,13 @@ PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
 PAYPAL_BASE_URL = "https://api-m.sandbox.paypal.com"  # Use https://api-m.paypal.com for live transactions
 
+RETURN_URL = " https://1721-109-191-145-94.ngrok-free.app"
+
+RETURN_ENDPOINT = RETURN_URL + '/return-url/'
+
 """
+Supported Currencies:
+
 USD - United States Dollar
 EUR - Euro
 GBP - British Pound Sterling
