@@ -77,7 +77,7 @@ async def create_payment_link(payment_request: PaymentRequest):
 
         return_url = f"{RETURN_BASE}{RETURN_ENDPOINT}{payment_request.user_id}"
 
-        logger.info(return_url)
+        logger.info(f"Creating payment link for user_id: {payment_request.user_id}, return_url: {return_url}")
 
         payload = {
             "intent": "CAPTURE",
@@ -110,7 +110,6 @@ async def create_payment_link(payment_request: PaymentRequest):
         logger.info(f"Order_id: {order_id} full PayPal API response from /create-payment-link/")
         logger.info(f"{response.json()}")
 
-        # Try to find the 'approve' link first, if not found, look for 'payer-action' link
         approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "approve"), None)
         if not approval_url:
             approval_url = next((link["href"] for link in response.json().get("links") if link["rel"] == "payer-action"), None)
@@ -120,6 +119,7 @@ async def create_payment_link(payment_request: PaymentRequest):
 
         return {"approval_url": approval_url, "order_id": order_id, "return_url": return_url}
     except requests.RequestException as e:
+        logger.error(f"Error creating payment link: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -153,6 +153,10 @@ async def handle_payment_and_redirect(token: str = Query(...),
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
 
+        logger.info(f"Payment captured for token: {token}, PayerID: {PayerID}")
+        logger.info(f"Full PayPal API response from /paypal_payment_capture/{user_id}")
+        logger.info(f"{response.json()}")
+
         # Добавь свою логику для получения redirect_link для юзера по его user_id
         # redirect_link = get_redirect_link(user_id)
 
@@ -161,6 +165,7 @@ async def handle_payment_and_redirect(token: str = Query(...),
         return RedirectResponse(url=redirect_link)
 
     except requests.RequestException as e:
+        logger.error(f"Error capturing payment: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -181,13 +186,13 @@ async def check_payment_status(order_id: str):
         response.raise_for_status()
         order_status = response.json().get("status")
 
-        logger.info(f"Order_id: {order_id} full PayPal API response from /check_payment_status/")
+        logger.info(f"Order_id: {order_id} full PayPal API response from /check-payment-status/")
         logger.info(f"{response.json()}")
 
         return {"order_id": order_id, "status": order_status}
     except requests.RequestException as e:
+        logger.error(f"Error checking payment status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.post("/create-webhook/", description="""
