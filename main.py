@@ -10,6 +10,7 @@ import logging
 from config import (PAYPAL_CLIENT_ID,
                     PAYPAL_CLIENT_SECRET,
                     PAYPAL_BASE_URL,
+                    RETURN_BASE,
                     RETURN_ENDPOINT
                     )
 
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 class PaymentRequest(BaseModel):
     currency: str
     amount: float
-    redirect_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 # class WebhookRequest(BaseModel):
@@ -53,10 +54,10 @@ def get_access_token():
 def get_redirect_link(redirect_id):
 
     if redirect_id == 'jopa123':
-        redirect_link = 'https://www.youtube.com/watch?v=l2lUfj3wx2Q'
+        redirect_link = 'https://www.youtube.com/'
         return redirect_link
 
-    return 'https://example.com'
+    return 'https://www.example.com'
 
 
 @app.get("/")
@@ -65,17 +66,16 @@ async def root():
 
 
 @app.post("/create-payment-link/", description="""
-Create a payment link for the specified amount and currency. 
-This endpoint facilitates the generation of a PayPal payment link, allowing users to securely complete transactions.
-The response includes the PayPal approval URL, the unique order ID associated with the transaction, 
-and the redirect URL where the customer will be redirected after approving the payment.
+    currency: str
+    amount: float
+    user_id: str
 """)
 async def create_payment_link(payment_request: PaymentRequest):
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders"
 
-        return_url = f"{RETURN_ENDPOINT}{payment_request.redirect_id}"
+        return_url = f"{RETURN_BASE}{RETURN_ENDPOINT}{payment_request.user_id}"
 
         logger.info(return_url)
 
@@ -92,7 +92,7 @@ async def create_payment_link(payment_request: PaymentRequest):
             "payment_source": {
                 "paypal": {
                     "experience_context": {
-                        "return_url": return_url,  # Include redirect_id as path parameter
+                        "return_url": return_url,  # Включает user_id как параметр пути
                     }
                 }
             }
@@ -126,8 +126,18 @@ async def create_payment_link(payment_request: PaymentRequest):
 returns = "https://www.example.com/return-url/jopa123?token=3KW787788H052150B&PayerID=V5P76KV5RDNZY"
 
 
-@app.get("/execute-payment/")
-async def execute_payment(token: str = Query(...)):
+# place it at Terrapay side
+
+@app.get("/paypal_payment_capture/{user_id}", description="""
+Handle the PayPal payment capture process after the user approves the payment.
+This endpoint is triggered when PayPal redirects the user to the specified return URL with a token and PayerID.
+It captures the payment using the provided token and PayerID, ensuring the payment is correctly attributed to the payer.
+After successfully capturing the payment, it redirects the user to a specified link.
+""")
+async def handle_payment_and_redirect(token: str = Query(...),
+                                      user_id: str = Path(...),
+                                      PayerID: str = Query(...)):
+
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{token}/capture"
@@ -135,31 +145,23 @@ async def execute_payment(token: str = Query(...)):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}"
         }
-        response = requests.post(url, headers=headers)
+        payload = {
+            "payer": {
+                "payer_id": PayerID
+            }
+        }
+        response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
 
-        return response.json()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Добавь свою логику для получения redirect_link для юзера по его user_id
+        # redirect_link = get_redirect_link(user_id)
 
-
-@app.get("/return-url/{redirect_id}")
-async def handle_return_url(token: str = Query(...), redirect_id: str = Path(...)):
-    try:
-
-        # Execute the payment
-        execute_response = await execute_payment(token)
-
-        # Redirect to the redirect_link after executing the payment
-
-        redirect_link = get_redirect_link(redirect_id)
+        redirect_link = 'https://www.example.com'
 
         return RedirectResponse(url=redirect_link)
 
-    except HTTPException as e:
+    except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 
 @app.get("/check-payment-status/{order_id}", description="""

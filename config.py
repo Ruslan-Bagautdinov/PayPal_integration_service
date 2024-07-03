@@ -14,7 +14,8 @@ RETURN_URL = " https://1721-109-191-145-94.ngrok-free.app"
 
 # RETURN_URL = "https://www.example.com"
 
-RETURN_ENDPOINT = RETURN_URL + '/return-url/'
+RETURN_BASE = os.getenv("RETURN_BASE")
+RETURN_ENDPOINT = os.getenv("RETURN_ENDPOINT")
 
 """
 Supported Currencies:
