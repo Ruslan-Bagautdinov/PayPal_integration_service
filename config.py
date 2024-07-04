@@ -10,8 +10,7 @@ PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
 PAYPAL_BASE_URL = os.getenv("PAYPAL_BASE_URL")
 
-RETURN_URL = " https://1721-109-191-145-94.ngrok-free.app"
-
+# RETURN_URL = " https://1721-109-191-145-94.ngrok-free.app"
 # RETURN_URL = "https://www.example.com"
 
 RETURN_BASE = os.getenv("RETURN_BASE")
@@ -41,4 +40,3 @@ DKK - Danish Krone
 TRY - Turkish Lira
 ZAR - South African Rand
 """
-print(RETURN_ENDPOINT)
