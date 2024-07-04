@@ -23,14 +23,14 @@ def get_access_token():
     return response.json().get("access_token")
 
 
-@router.get("/paypal_payment_capture/{user_id}", description="""
+@router.get("/paypal_payment_capture/{service_id:path}", description="""
 Handle the PayPal payment capture process after the user approves the payment.
 This endpoint is triggered when PayPal redirects the user to the specified return URL with a token and PayerID.
 It captures the payment using the provided token and PayerID, ensuring the payment is correctly attributed to the payer.
 After successfully capturing the payment, it redirects the user to a specified link.
 """)
 async def handle_payment_and_redirect(token: str = Query(...),
-                                      user_id: str = Path(...),
+                                      service_id: str = Path(...),
                                       PayerID: str = Query(...)):
 
     try:
@@ -49,7 +49,7 @@ async def handle_payment_and_redirect(token: str = Query(...),
         response.raise_for_status()
 
         logger.info(f"Payment captured for token: {token}, PayerID: {PayerID}")
-        logger.info(f"Full PayPal API response from /paypal_payment_capture/{user_id}")
+        logger.info(f"Full PayPal API response from /paypal_payment_capture/{service_id}")
         logger.info(f"{response.json()}")
 
         # Добавь свою логику для получения redirect_link для юзера по его user_id

@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class PaymentRequest(BaseModel):
     currency: str
     amount: float
-    user_id: Optional[str] = None
+    service_id: Optional[str] = None
 
 
 # class WebhookRequest(BaseModel):
@@ -68,16 +68,16 @@ async def root():
 @app.post("/create-payment-link/", description="""
     currency: str
     amount: float
-    user_id: str
+    service_id: str
 """)
 async def create_payment_link(payment_request: PaymentRequest):
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders"
 
-        return_url = f"{RETURN_BASE}{RETURN_ENDPOINT}{payment_request.user_id}"
+        return_url = f"{RETURN_BASE}{RETURN_ENDPOINT}{payment_request.service_id}"
 
-        logger.info(f"Creating payment link for user_id: {payment_request.user_id}, return_url: {return_url}")
+        logger.info(f"Creating payment link for service_id: {payment_request.service_id}, return_url: {return_url}")
 
         payload = {
             "intent": "CAPTURE",
@@ -92,7 +92,7 @@ async def create_payment_link(payment_request: PaymentRequest):
             "payment_source": {
                 "paypal": {
                     "experience_context": {
-                        "return_url": return_url,  # Включает user_id как параметр пути
+                        "return_url": return_url,  # Включает service_id как параметр пути
                     }
                 }
             }
@@ -128,14 +128,14 @@ returns = "https://www.example.com/return-url/jopa123?token=3KW787788H052150B&Pa
 
 # place it at Terrapay side
 
-@app.get("/paypal_payment_capture/{user_id}", description="""
+@app.get("/paypal_payment_capture/{service_id}", description="""
 Handle the PayPal payment capture process after the user approves the payment.
 This endpoint is triggered when PayPal redirects the user to the specified return URL with a token and PayerID.
 It captures the payment using the provided token and PayerID, ensuring the payment is correctly attributed to the payer.
 After successfully capturing the payment, it redirects the user to a specified link.
 """)
 async def handle_payment_and_redirect(token: str = Query(...),
-                                      user_id: str = Path(...),
+                                      service_id: str = Path(...),
                                       PayerID: str = Query(...)):
 
     try:
@@ -154,11 +154,11 @@ async def handle_payment_and_redirect(token: str = Query(...),
         response.raise_for_status()
 
         logger.info(f"Payment captured for token: {token}, PayerID: {PayerID}")
-        logger.info(f"Full PayPal API response from /paypal_payment_capture/{user_id}")
+        logger.info(f"Full PayPal API response from /paypal_payment_capture/{service_id}")
         logger.info(f"{response.json()}")
 
-        # Добавь свою логику для получения redirect_link для юзера по его user_id
-        # redirect_link = get_redirect_link(user_id)
+        # Добавь свою логику для получения redirect_link для юзера по его service_id
+        # redirect_link = get_redirect_link(service_id)
 
         redirect_link = 'https://www.example.com'
 
