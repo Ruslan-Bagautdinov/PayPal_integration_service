@@ -14,7 +14,6 @@ from config import (PAYPAL_CLIENT_ID,
                     RETURN_ENDPOINT
                     )
 
-
 app = FastAPI()
 
 app.add_middleware(
@@ -49,15 +48,6 @@ def get_access_token():
                              headers={"Content-Type": "application/x-www-form-urlencoded"})
     response.raise_for_status()
     return response.json().get("access_token")
-
-
-def get_redirect_link(redirect_id):
-
-    if redirect_id == 'jopa123':
-        redirect_link = 'https://www.youtube.com/'
-        return redirect_link
-
-    return 'https://www.example.com'
 
 
 @app.get("/")
@@ -123,10 +113,7 @@ async def create_payment_link(payment_request: PaymentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-returns = "https://www.example.com/return-url/jopa123?token=3KW787788H052150B&PayerID=V5P76KV5RDNZY"
-
-
-# place it at Terrapay side
+# на стороне Террапей разместить в поддомене
 
 @app.get("/paypal_payment_capture/{service_id}", description="""
 Handle the PayPal payment capture process after the user approves the payment.
