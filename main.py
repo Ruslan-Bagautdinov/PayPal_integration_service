@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 from typing import Optional
-import logging
+from loguru import logger
 
 from config import (PAYPAL_CLIENT_ID,
                     PAYPAL_CLIENT_SECRET,
@@ -14,7 +14,15 @@ from config import (PAYPAL_CLIENT_ID,
                     RETURN_ENDPOINT
                     )
 
-app = FastAPI()
+app = FastAPI(
+    title="PayPal Integration Service",
+    description="""
+    A FastAPI service to integrate PayPal payment processing into your application.
+    This service provides endpoints to create payment links, handle payment captures,
+    check payment statuses, manage webhooks, and listen for webhook events.
+    """,
+    version="1.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,8 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger.add("app.log", rotation="500 MB")
 
 
 class PaymentRequest(BaseModel):
@@ -34,12 +41,16 @@ class PaymentRequest(BaseModel):
     service_id: Optional[str] = None
 
 
-# class WebhookRequest(BaseModel):
-#     url: str
-#     event_types: list
-
-
 def get_access_token():
+    """
+    Obtain an access token from PayPal using client credentials.
+
+    Returns:
+        str: The access token.
+
+    Raises:
+        HTTPException: If there is an error during the PayPal API request.
+    """
     url = f"{PAYPAL_BASE_URL}/v1/oauth2/token"
     data = {"grant_type": "client_credentials"}
     response = requests.post(url,
@@ -50,17 +61,32 @@ def get_access_token():
     return response.json().get("access_token")
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
+    """
+    Redirect to the API documentation.
+    """
     return RedirectResponse(url='/docs')
 
 
 @app.post("/create-payment-link/", description="""
-    currency: str
-    amount: float
-    service_id: str
+Create a PayPal payment link for the specified currency and amount.
+This endpoint generates a PayPal payment link that can be used to initiate a payment.
+The payment link includes a return URL that redirects the user after payment approval.
 """)
 async def create_payment_link(payment_request: PaymentRequest):
+    """
+    Create a PayPal payment link.
+
+    Args:
+        payment_request (PaymentRequest): The payment details including currency, amount, and service ID.
+
+    Returns:
+        dict: A dictionary containing the approval URL, order ID, and return URL.
+
+    Raises:
+        HTTPException: If there is an error during the PayPal API request.
+    """
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders"
@@ -82,7 +108,7 @@ async def create_payment_link(payment_request: PaymentRequest):
             "payment_source": {
                 "paypal": {
                     "experience_context": {
-                        "return_url": return_url,  # Включает service_id как параметр пути
+                        "return_url": return_url,
                     }
                 }
             }
@@ -113,8 +139,6 @@ async def create_payment_link(payment_request: PaymentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# на стороне Террапей разместить в поддомене
-
 @app.get("/paypal_payment_capture/{service_id}", description="""
 Handle the PayPal payment capture process after the user approves the payment.
 This endpoint is triggered when PayPal redirects the user to the specified return URL with a token and PayerID.
@@ -124,7 +148,20 @@ After successfully capturing the payment, it redirects the user to a specified l
 async def handle_payment_and_redirect(token: str = Query(...),
                                       service_id: str = Path(...),
                                       PayerID: str = Query(...)):
+    """
+    Capture the PayPal payment and redirect the user.
 
+    Args:
+        token (str): The payment token.
+        service_id (str): The service ID associated with the payment.
+        PayerID (str): The PayerID provided by PayPal.
+
+    Returns:
+        RedirectResponse: A redirect response to the specified link.
+
+    Raises:
+        HTTPException: If there is an error during the PayPal API request.
+    """
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{token}/capture"
@@ -144,9 +181,6 @@ async def handle_payment_and_redirect(token: str = Query(...),
         logger.info(f"Full PayPal API response from /paypal_payment_capture/{service_id}")
         logger.info(f"{response.json()}")
 
-        # Добавь свою логику для получения redirect_link для юзера по его service_id
-        # redirect_link = get_redirect_link(service_id)
-
         redirect_link = 'https://www.example.com'
 
         return RedirectResponse(url=redirect_link)
@@ -162,6 +196,18 @@ This endpoint queries the PayPal API to retrieve the current status of a payment
 providing real-time information on whether the payment has been completed, authorized, or is still pending.
 """)
 async def check_payment_status(order_id: str):
+    """
+    Check the status of a PayPal payment order.
+
+    Args:
+        order_id (str): The order ID of the payment.
+
+    Returns:
+        dict: A dictionary containing the order ID and its status.
+
+    Raises:
+        HTTPException: If there is an error during the PayPal API request.
+    """
     try:
         access_token = get_access_token()
         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}"
@@ -189,7 +235,7 @@ whenever a checkout order is approved on PayPal.
 """)
 async def create_webhook(webhook_url: str = Query(..., description="The URL where the webhook events will be sent")):
     """
-    Create a webhook for the specified URL to receive CHECKOUT.ORDER.APPROVED events.
+    Create a PayPal webhook.
 
     Args:
         webhook_url (str): The URL where the webhook events will be sent.
@@ -229,7 +275,7 @@ including their URLs and the types of events they are configured to receive.
 """)
 async def list_webhooks_handler():
     """
-    List all webhooks configured for the PayPal account.
+    List all PayPal webhooks.
 
     Returns:
         dict: A dictionary containing the list of webhooks.
@@ -259,7 +305,7 @@ Once deleted, the webhook will no longer receive any events.
 """)
 async def delete_webhook(webhook_id: str = Query(..., description="The ID of the webhook to be deleted")):
     """
-    Delete a webhook using the provided webhook ID.
+    Delete a PayPal webhook.
 
     Args:
         webhook_id (str): The unique identifier of the webhook to be deleted.
@@ -290,7 +336,6 @@ async def delete_webhook(webhook_id: str = Query(..., description="The ID of the
                 raise HTTPException(status_code=e.response.status_code,
                                     detail=f"Error deleting webhook: {error_message}")
             except ValueError:
-                # If the response is not JSON, fallback to the original error message
                 pass
         raise HTTPException(status_code=500, detail=f"Error deleting webhook: {str(e)}")
 
@@ -303,7 +348,7 @@ It processes the incoming webhook payload and extracts relevant information.
 """)
 async def webhook_listener(request: Request):
     """
-    Listen for incoming webhook events from PayPal.
+    Listen for incoming PayPal webhook events.
 
     Args:
         request (Request): The incoming HTTP request containing the webhook payload.
@@ -319,32 +364,6 @@ async def webhook_listener(request: Request):
         order_id = payload.get("resource", {}).get("id")
         status = payload.get("event_type")
 
-        # if order_id and status:
-        #     file_name = f"{order_id}_{status}.txt"
-        #     file_path = os.path.join(BASE_DIR, "webhook_logs", file_name)
-        #     os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        #     with open(file_path, "w") as file:
-        #         file.write(str(payload))
-
         return {"order_id": order_id, "status": status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-
-# handler for fake completing payments in the sandbox
-
-# @app.post("/capture-payment/")
-# async def capture_payment_handler(order_id: str):
-#     try:
-#         access_token = get_access_token()
-#         url = f"{PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}/capture"
-#         headers = {
-#             "Content-Type": "application/json",
-#             "Authorization": f"Bearer {access_token}"
-#         }
-#         response = requests.post(url, headers=headers)
-#         response.raise_for_status()
-#         return response.json()
-#     except requests.RequestException as e:
-#         raise HTTPException(status_code=500, detail=str(e))
